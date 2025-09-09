@@ -10,7 +10,8 @@ from de_feat_cal import de_feat_cal
 from model.simple_model import SimpleModel
 from model.eegnet import EEGNet
 from model.mlp import MLP
-from model.rgnn import RGNN, get_edge_weight
+# Commented out RGNN import as it's not needed for EEGNet
+# from model.rgnn import RGNN, get_edge_weight
 from utilities import *
 
 
@@ -22,8 +23,7 @@ def model_init(args, if_simple, num_classes, device):
     elif args.model.lower() == 'mlp':
         _model = MLP(args, num_classes)
     elif args.model.lower() == 'rgnn':
-        edge_index, edge_weight = get_edge_weight()
-        _model = RGNN(device, 62, edge_weight, edge_index, 5, 200, num_classes, 2)
+        raise ValueError("RGNN model is currently not supported")
     else:
         raise ValueError(f"Couldn't find the model {args.model}")
     return _model
@@ -99,7 +99,8 @@ if __name__ == '__main__':
 
     simple_model_list = ['svm', 'rf', 'knn', 'dt', 'ridge']
     if_simple = args.model.lower() in simple_model_list
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     model = model_init(args, if_simple, len(dataset) // 50, device)
     if args.pretrained_model:
         model.load_state_dict(torch.load(os.path.join(args.output_dir, str(args.pretrained_model))))

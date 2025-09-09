@@ -19,5 +19,5 @@ def de_feat_cal(eeg_data, args):
             de_feat_list.append(diff_entropy)
         _de_feat = np.concatenate(de_feat_list, axis=1)
         # print(_de_feat.shape)  # de_feat.shape = (4000, 310), normally
-        np.save(os.path.join('../data/de_feat/', f"{args.subject}_{args.granularity}_de.npy"), _de_feat)
+        np.save(os.path.join(args.dataset_dir, 'de_feat', f"{args.subject}_{args.granularity}_de.npy"), _de_feat)
         return _de_feat

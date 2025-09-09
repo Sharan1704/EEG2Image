@@ -9,7 +9,7 @@ class EEGImageNetDataset(Dataset):
     def __init__(self, args, transform=None):
         self.dataset_dir = args.dataset_dir
         self.transform = transform
-        loaded = torch.load(os.path.join(args.dataset_dir, "EEG-ImageNet.pth"))
+        loaded = torch.load(os.path.join(args.dataset_dir, "EEG-ImageNet.pth"), weights_only=False)
         self.labels = loaded["labels"]
         self.images = loaded["images"]
         if args.subject != -1:
@@ -32,15 +32,7 @@ class EEGImageNetDataset(Dataset):
 
     def __getitem__(self, index):
         if self.use_image_label:
-            path = self.data[index]["image"]
-            label = Image.open(os.path.join(self.dataset_dir, "imageNet_images", path.split('_')[0], path))
-            if label.mode == 'L':
-                label = label.convert('RGB')
-            if self.transform:
-                label = self.transform(label)
-            else:
-                label = path
-            # print(f"{index} {path} {label.size()}")
+            label = self.data[index]["image"]  # Return image path directly
         else:
             label = self.labels.index(self.data[index]["label"])
         if self.use_frequency_feat:

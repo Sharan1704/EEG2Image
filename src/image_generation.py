@@ -27,11 +27,12 @@ def model_main(args, model, train_loader, test_loader, criterion, optimizer, num
     for epoch in tqdm(range(num_epochs)):
         model.train()
         for batch_idx, (inputs, labels) in enumerate(train_loader):
-            labels = torch.stack([clip_embeddings[image_name] for image_name in labels]).squeeze()
-            inputs, labels = inputs.to(device), labels.to(device)
+            # Get image paths directly from labels since we modified dataset to return paths
+            label_embeddings = torch.stack([clip_embeddings[label] for label in labels]).squeeze()
+            inputs, label_embeddings = inputs.to(device), label_embeddings.to(device)
             optimizer.zero_grad()
             embeddings = model(inputs)
-            loss = criterion(embeddings, labels)
+            loss = criterion(embeddings, label_embeddings)
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
@@ -42,10 +43,11 @@ def model_main(args, model, train_loader, test_loader, criterion, optimizer, num
         with torch.no_grad():
             test_loss = 0
             for (inputs, labels) in test_loader:
-                labels = torch.stack([clip_embeddings[image_name] for image_name in labels]).squeeze()
-                inputs, labels = inputs.to(device), labels.to(device)
+                    # Get image paths directly from labels since we modified dataset to return paths
+                label_embeddings = torch.stack([clip_embeddings[label] for label in labels]).squeeze()
+                inputs, label_embeddings = inputs.to(device), label_embeddings.to(device)
                 embeddings = model(inputs)
-                test_loss += criterion(embeddings, labels)
+                test_loss += criterion(embeddings, label_embeddings)
             print(f"Loss on test set: {test_loss / len(test_loader)}")
             if test_loss < min_loss:
                 min_loss = test_loss
@@ -63,10 +65,18 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--pretrained_model", help="pretrained model")
     parser.add_argument("-s", "--subject", default=0, type=int, help="subject from 0 to 15")
     parser.add_argument("-o", "--output_dir", required=True, help="directory to save results")
+    parser.add_argument("--clip-embeddings", default=None, help="path to CLIP embeddings for testing specific categories")
     args = parser.parse_args()
     print(args)
 
-    dataset = EEGImageNetDataset(args)
+    # Set up image transforms
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    dataset = EEGImageNetDataset(args, transform=transform)
     eeg_data = np.stack([i[0].numpy() for i in dataset], axis=0)
     # extract frequency domain features
     de_feat = de_feat_cal(eeg_data, args)
@@ -76,20 +86,37 @@ if __name__ == '__main__':
     train_subset = Subset(dataset, train_index)
     test_subset = Subset(dataset, test_index)
 
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     model = model_init(args, device)
+    
+    # Load CLIP embeddings and filter dataset
     clip_embeddings = torch.load(os.path.join(args.output_dir, "clip_embeddings.pth"))
+    dataset.data = [data for data in dataset.data if data["image"] in clip_embeddings]
+    print(f"Filtered dataset to {len(dataset.data)} samples with available CLIP embeddings")
+    
+    # Set up model configuration
     if args.pretrained_model:
         model.load_state_dict(torch.load(os.path.join(args.output_dir, str(args.pretrained_model))))
     if args.model.lower() == 'mlp_sd':
         dataset.use_frequency_feat = True
-        dataset.use_image_label = True
-        train_dataloader = DataLoader(train_subset, batch_size=args.batch_size, shuffle=True)
-        test_dataloader = DataLoader(test_subset, batch_size=args.batch_size, shuffle=False)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-        criterion = torch.nn.MSELoss()
-        epoch, loss = model_main(args, model, train_dataloader, test_dataloader, criterion, optimizer, 1000, device,
-                                 clip_embeddings)
+        dataset.use_image_label = True  # Use image paths for CLIP embeddings
+    
+    # Re-calculate train/test split after filtering
+    train_index = np.array([i for i in range(len(dataset)) if i % 50 < 30])
+    test_index = np.array([i for i in range(len(dataset)) if i % 50 > 29])
+    train_subset = Subset(dataset, train_index)
+    test_subset = Subset(dataset, test_index)
+    
+    # Set up data loaders, optimizer and criterion
+    train_dataloader = DataLoader(train_subset, batch_size=args.batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_subset, batch_size=args.batch_size, shuffle=False)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = torch.nn.MSELoss()
+    
+    # Start training
+    epoch, loss = model_main(args, model, train_dataloader, test_dataloader, criterion, optimizer, 1000, device,
+                          clip_embeddings)
     with open(os.path.join(args.output_dir, f"mlpsd.txt"), "a") as f:
         f.write(f"{epoch}: {loss}")
         f.write("\n")

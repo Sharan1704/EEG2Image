@@ -192,18 +192,6 @@ EEG-ImageNet-Dataset/
 - **Subject-Specific Training**: Supports individual subject models (0-15)
 - **Granularity Control**: Coarse and fine-grained category classification
 
-## Citation
-
-If you use this code or dataset, please cite:
-
-```bibtex
-@article{eeg2img2024,
-  title={EEG-to-Image Generation: Mapping Brain Signals to Visual Representations},
-  author={Your Name},
-  journal={Your Journal},
-  year={2024}
-}
-```
 
 ## License
 
